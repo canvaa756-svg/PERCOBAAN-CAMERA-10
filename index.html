@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Dilatasi AR - Matematika dengan Kamera Live</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { overflow: hidden; font-family: 'Roboto', sans-serif; }
+        
+        /* UI Overlay - tampil di atas kamera */
+        .ui-panel {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.85);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 12px 16px;
+            color: white;
+            z-index: 100;
+            pointer-events: auto;
+            max-height: 40vh;
+            overflow-y: auto;
+            border: 1px solid rgba(6,182,212,0.5);
+        }
+        
+        .ui-panel h3 {
+            font-size: 14px;
+            margin-bottom: 8px;
+            color: #06b6d4;
+        }
+        
+        .scale-buttons {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+        
+        .scale-btn {
+            background: #1e293b;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 20px;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        
+        .scale-btn.active {
+            background: linear-gradient(95deg, #4f46e5, #06b6d4);
+        }
+        
+        .center-control {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .center-control input {
+            width: 60px;
+            padding: 6px;
+            border-radius: 8px;
+            border: none;
+            text-align: center;
+            background: #1e293b;
+            color: white;
+        }
+        
+        button {
+            background: #06b6d4;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 30px;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        
+        .result-text {
+            font-size: 12px;
+            background: #0f172a;
+            padding: 8px;
+            border-radius: 12px;
+            margin-top: 8px;
+            font-family: monospace;
+        }
+        
+        .info-ar {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0,0,0,0.6);
+            padding: 6px 12px;
+            border-radius: 20px;
+            color: #06b6d4;
+            font-size: 12px;
+            z-index: 100;
+            pointer-events: none;
+        }
+        
+        @media (max-width: 600px) {
+            .ui-panel { padding: 8px 12px; }
+            .scale-btn { padding: 4px 10px; font-size: 12px; }
+            button { padding: 6px 12px; font-size: 12px; }
+        }
+    </style>
+    
+    <!-- Library A-Frame + AR.js untuk WebAR -->
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ar.js@2.2.2/aframe/build/aframe-ar.js"></script>
+</head>
+<body>
+    <!-- Informasi AR -->
+    <div class="info-ar">
+        📷 Arahkan kamera ke MARKER HIRO → Objek 3D muncul
+    </div>
+    
+    <!-- UI Kontrol Dilatasi -->
+    <div class="ui-panel">
+        <h3>📐 DILATASI AR | Pusat Sembarang (a,b)</h3>
+        
+        <div class="center-control">
+            <span>Pusat (a,b):</span>
+            <input type="number" id="centerX" value="0" step="0.5" placeholder="a">
+            <input type="number" id="centerY" value="0" step="0.5" placeholder="b">
+            <button id="applyCenterBtn">Terapkan Pusat</button>
+        </div>
+        
+        <div class="scale-buttons">
+            <button class="scale-btn" data-scale="0.5">0.5x</button>
+            <button class="scale-btn active" data-scale="2">2x</button>
+            <button class="scale-btn" data-scale="3">3x</button>
+            <button class="scale-btn" data-scale="-1">-1x (Terbalik)</button>
+            <input type="number" id="customScale" value="2" step="0.1" style="width:70px; background:#1e293b; color:white; border:none; padding:4px 8px; border-radius:20px;">
+            <button id="applyCustomScale">Set</button>
+        </div>
+        
+        <div class="result-text" id="resultText">
+            🔄 Arahkan kamera ke marker HIRO...
+        </div>
+        <div style="font-size:10px; margin-top:8px; color:#94a3b8;">
+            💡 Marker HIRO: cetak gambar hitam-putih di bawah ini
+        </div>
+    </div>
+
+    <!-- Scene AR.js -->
+    <a-scene embedded
+             arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;">
+        
+        <!-- Marker preset HIRO -->
+        <a-marker preset="hiro" id="ar-marker">
+            
+            <!-- Objek 3D yang akan muncul di atas marker -->
+            <!-- Bangun datar akan digambar menggunakan entity 3D -->
+            <a-entity id="dilatasi-object" position="0 0 0">
+                <!-- Titik Pusat Dilatasi (lingkaran kuning) -->
+                <a-sphere id="center-sphere" radius="0.15" color="#facc15" position="0 0 0.05"
+                          material="emissive: #facc15; emissiveIntensity: 0.5">
+                </a-sphere>
+                
+                <!-- Objek Asli (merah) akan diganti dinamis via JS -->
+                <a-entity id="original-shape"></a-entity>
+                
+                <!-- Hasil Dilatasi (biru) -->
+                <a-entity id="dilated-shape"></a-entity>
+            </a-entity>
+            
+        </a-marker>
+        
+        <!-- Kamera -->
+        <a-entity camera></a-entity>
+    </a-scene>
+
+    <script>
+        // ============ DATA DILATASI ============
+        let currentShapeType = 'triangle'; // triangle, square, point
+        let targetScale = 2;
+        let centerPoint = { x: 0, y: 0 };
+        
+        // Koordinat bangun datar (dalam koordinat lokal marker, skala 1 unit = 10cm)
+        const shapes = {
+            point: {
+                points: [{ x: 0, y: 0, label: 'P' }],
+                createEntity: (points, color, opacity = 1) => {
+                    const entity = document.createElement('a-entity');
+                    points.forEach(p => {
+                        const sphere = document.createElement('a-sphere');
+                        sphere.setAttribute('radius', '0.12');
+                        sphere.setAttribute('color', color);
+                        sphere.setAttribute('position', `${p.x} ${p.y} 0.05`);
+                        if (opacity < 1) sphere.setAttribute('material', `transparent: true; opacity: ${opacity}`);
+                        entity.appendChild(sphere);
+                    });
+                    return entity;
+                }
+            },
+            triangle: {
+                points: [
+                    { x: 0, y: 1.2, label: 'A' },
+                    { x: -1, y: -0.8, label: 'B' },
+                    { x: 1, y: -0.8, label: 'C' }
+                ],
+                createEntity: (points, color, opacity = 1) => {
+                    const entity = document.createElement('a-entity');
+                    // Garis segitiga
+                    const linePoints = points.map(p => `${p.x} ${p.y} 0.05`).join(', ');
+                    const line = document.createElement('a-triangle');
+                    // Untuk a-triangle perlu vertices, gunakan a-entity dengan line
+                    const lineEntity = document.createElement('a-entity');
+                    lineEntity.setAttribute('line', {
+                        start: `${points[0].x} ${points[0].y} 0.05`,
+                        end: `${points[1].x} ${points[1].y} 0.05`,
+                        color: color,
+                        linewidth: 4
+                    });
+                    entity.appendChild(lineEntity);
+                    
+                    const line2 = document.createElement('a-entity');
+                    line2.setAttribute('line', {
+                        start: `${points[1].x} ${points[1].y} 0.05`,
+                        end: `${points[2].x} ${points[2].y} 0.05`,
+                        color: color,
+                        linewidth: 4
+                    });
+                    entity.appendChild(line2);
+                    
+                    const line3 = document.createElement('a-entity');
+                    line3.setAttribute('line', {
+                        start: `${points[2].x} ${points[2].y} 0.05`,
+                        end: `${points[0].x} ${points[0].y} 0.05`,
+                        color: color,
+                        linewidth: 4
+                    });
+                    entity.appendChild(line3);
+                    
+                    // Titik sudut
+                    points.forEach(p => {
+                        const sphere = document.createElement('a-sphere');
+                        sphere.setAttribute('radius', '0.08');
+                        sphere.setAttribute('color', color);
+                        sphere.setAttribute('position', `${p.x} ${p.y} 0.06`);
+                        if (opacity < 1) sphere.setAttribute('material', `transparent: true; opacity: ${opacity}`);
+                        entity.appendChild(sphere);
+                    });
+                    
+                    return entity;
+                }
+            },
+            square: {
+                points: [
+                    { x: -0.8, y: 0.8, label: 'A' },
+                    { x: 0.8, y: 0.8, label: 'B' },
+                    { x: 0.8, y: -0.8, label: 'C' },
+                    { x: -0.8, y: -0.8, label: 'D' }
+                ],
+                createEntity: (points, color, opacity = 1) => {
+                    const entity = document.createElement('a-entity');
+                    // 4 sisi garis
+                    const edges = [[0,1], [1,2], [2,3], [3,0]];
+                    edges.forEach(edge => {
+                        const line = document.createElement('a-entity');
+                        line.setAttribute('line', {
+                            start: `${points[edge[0]].x} ${points[edge[0]].y} 0.05`,
+                            end: `${points[edge[1]].x} ${points[edge[1]].y} 0.05`,
+                            color: color,
+                            linewidth: 4
+                        });
+                        entity.appendChild(line);
+                    });
+                    
+                    points.forEach(p => {
+                        const sphere = document.createElement('a-sphere');
+                        sphere.setAttribute('radius', '0.08');
+                        sphere.setAttribute('color', color);
+                        sphere.setAttribute('position', `${p.x} ${p.y} 0.06`);
+                        entity.appendChild(sphere);
+                    });
+                    return entity;
+                }
+            }
+        };
+        
+        let currentShape = shapes.triangle;
+        
+        // Fungsi dilatasi titik
+        function dilatePt(x, y, k, cx, cy) {
+            return {
+                x: cx + k * (x - cx),
+                y: cy + k * (y - cx)
+            };
+        }
+        
+        function dilatePoints(points, k, cx, cy) {
+            return points.map(p => ({
+                x: cx + k * (p.x - cx),
+                y: cy + k * (p.y - cy),
+                label: p.label
+            }));
+        }
+        
+        // Update tampilan AR
+        function updateARDisplay() {
+            const originalPoints = currentShape.points;
+            const dilatedPoints = dilatePoints(originalPoints, targetScale, centerPoint.x, centerPoint.y);
+            
+            // Hapus entity lama
+            const originalContainer = document.getElementById('original-shape');
+            const dilatedContainer = document.getElementById('dilated-shape');
+            const centerSphere = document.getElementById('center-sphere');
+            
+            if (originalContainer) {
+                while (originalContainer.firstChild) originalContainer.removeChild(originalContainer.firstChild);
+                const newOriginal = currentShape.createEntity(originalPoints, '#e11d48', 1);
+                originalContainer.appendChild(newOriginal);
+            }
+            
+            if (dilatedContainer) {
+                while (dilatedContainer.firstChild) dilatedContainer.removeChild(dilatedContainer.firstChild);
+                const newDilated = currentShape.createEntity(dilatedPoints, '#06b6d4', 0.85);
+                dilatedContainer.appendChild(newDilated);
+            }
+            
+            // Update pusat dilatasi
+            if (centerSphere) {
+                centerSphere.setAttribute('position', `${centerPoint.x} ${centerPoint.y} 0.1`);
+            }
+            
+            // Update teks hasil
+            const resultText = document.getElementById('resultText');
+            if (resultText) {
+                if (originalPoints.length === 1) {
+                    const orig = originalPoints[0];
+                    const dil = dilatedPoints[0];
+                    resultText.innerHTML = `📐 P(${orig.x.toFixed(2)},${orig.y.toFixed(2)}) → P'(${dil.x.toFixed(2)},${dil.y.toFixed(2)})<br>k = ${targetScale} | Pusat (${centerPoint.x},${centerPoint.y})`;
+                } else {
+                    resultText.innerHTML = `📐 ${currentShapeType.toUpperCase()} didilatasi dengan k = ${targetScale}<br>Pusat (${centerPoint.x}, ${centerPoint.y}) | ✅ Lihat objek di atas marker!`;
+                }
+            }
+        }
+        
+        // Ganti bentuk
+        function setShape(type) {
+            currentShapeType = type;
+            if (type === 'point') currentShape = shapes.point;
+            else if (type === 'triangle') currentShape = shapes.triangle;
+            else if (type === 'square') currentShape = shapes.square;
+            updateARDisplay();
+        }
+        
+        // Event listeners
+        function setupUI() {
+            // Scale buttons
+            document.querySelectorAll('.scale-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.scale-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    targetScale = parseFloat(btn.dataset.scale);
+                    document.getElementById('customScale').value = targetScale;
+                    updateARDisplay();
+                });
+            });
+            
+            document.getElementById('applyCustomScale').addEventListener('click', () => {
+                const val = parseFloat(document.getElementById('customScale').value);
+                if (!isNaN(val)) {
+                    targetScale = val;
+                    document.querySelectorAll('.scale-btn').forEach(b => b.classList.remove('active'));
+                    updateARDisplay();
+                }
+            });
+            
+            document.getElementById('applyCenterBtn').addEventListener('click', () => {
+                const cx = parseFloat(document.getElementById('centerX').value);
+                const cy = parseFloat(document.getElementById('centerY').value);
+                if (!isNaN(cx) && !isNaN(cy)) {
+                    centerPoint = { x: cx, y: cy };
+                    updateARDisplay();
+                }
+            });
+            
+            // Shape selection via keyboard numbers atau bisa ditambah tombol
+            window.addEventListener('keydown', (e) => {
+                if (e.key === '1') setShape('point');
+                if (e.key === '2') setShape('triangle');
+                if (e.key === '3') setShape('square');
+            });
+        }
+        
+        // Tunggu scene siap
+        window.addEventListener('load', () => {
+            setupUI();
+            updateARDisplay();
+            
+            // Info tambahan
+            console.log('AR Dilatasi siap! Cetak marker HIRO dan arahkan kamera.');
+        });
+        
+        // Deteksi marker terdeteksi
+        const marker = document.querySelector('a-marker');
+        if (marker) {
+            marker.addEventListener('markerFound', () => {
+                document.getElementById('resultText').style.background = '#0a5c5c';
+                document.getElementById('resultText').innerHTML = '✅ Marker DETECTED! Objek 3D muncul di atas marker.<br>' + document.getElementById('resultText').innerHTML.split('<br>')[1];
+            });
+            marker.addEventListener('markerLost', () => {
+                document.getElementById('resultText').style.background = '#0f172a';
+            });
+        }
+    </script>
+</body>
+</html>
